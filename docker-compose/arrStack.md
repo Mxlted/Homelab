@@ -1,4 +1,4 @@
-```bash
+```yaml
 services:
   qbittorrent:
     container_name: qbittorrent
@@ -95,3 +95,4 @@ services:
 
 networks: {}
 ```
+
