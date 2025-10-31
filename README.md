@@ -1,2 +1,2 @@
-# HomeLab
+# Homelab
 Personal homelab setup, configs, and automation for self-hosted infrastructure.
