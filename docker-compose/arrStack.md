@@ -1,6 +1,7 @@
 ```yaml
 services:
   qbittorrent:
+    hostname: qbittorrent.internal # allows to communicate with cross-seed when its under vpn
     container_name: qbittorrent
     image: ghcr.io/hotio/qbittorrent
     restart: unless-stopped
@@ -82,17 +83,18 @@ services:
     ports:
       - 8191:8191
     restart: unless-stopped
-  boxarr:
-    image: ghcr.io/iongpt/boxarr:latest
-    container_name: boxarr
+  cross-seed:
+    image: ghcr.io/cross-seed/cross-seed:6
+    hostname: cross-seed.internal # allows to communicate with qbit when qbittorrent is under vpn
+    container_name: cross-seed
+    userns_mode: host
+    user: 1000:1000
     ports:
-      - 8898:8888
+      - 2468:2468
     volumes:
-      - /mnt/nas/configs/boxarr:/config
+      - /mnt/nas/configs/crossseed:/config
+      - /mnt/nas/media:/media
+    command: daemon
     restart: unless-stopped
-    environment:
-      - TZ=America/New_York
 networks: {}
 ```
-
-
