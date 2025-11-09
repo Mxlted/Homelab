@@ -1,20 +1,20 @@
 ```yaml
 services:
   qbittorrent:
-    hostname: qbittorrent.internal # allows to communicate with cross-seed when its under vpn
+    hostname: qbittorrent.internal
     container_name: qbittorrent
     image: ghcr.io/hotio/qbittorrent
     restart: unless-stopped
     ports:
       - 8080:8080
     environment:
-      - PUID=1000
-      - PGID=1000
+      - PUID=0
+      - PGID=0
       - UMASK=002
       - TZ=America/New_York
       - WEBUI_PORTS=8080/tcp,8080/udp
       - VPN_ENABLED=true
-      - VPN_CONF=wg0
+      - VPN_CONF=wg0backup
       - VPN_PROVIDER=generic
       - VPN_LAN_NETWORK=192.168.1.0/24
       - VPN_LAN_LEAK_ENABLED=false
@@ -32,14 +32,16 @@ services:
       - net.ipv6.conf.all.disable_ipv6=1
     volumes:
       - /mnt/nas/configs/qbittorrent:/config
+      - /mnt/nas/configs/qbittorrent/cache:/app/qBittorrent/cache
+      - /mnt/nas/configs/qbittorrent/data:/app/qBittorrent/data
       - /mnt/nas/media:/media
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
     environment:
-      - PUID=1000
-      - PGID=1000
       - TZ=America/New_York
+      - PUID=0
+      - PGID=0
     volumes:
       - /mnt/nas/configs/prowlarr:/config
       - /mnt/nas/media/:/media/
@@ -50,9 +52,9 @@ services:
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
     environment:
-      - PUID=1000
-      - PGID=1000
       - TZ=America/New_York
+      - PUID=0
+      - PGID=0
     volumes:
       - /mnt/nas/configs/radarr:/config
       - /mnt/nas/media:/media
@@ -63,9 +65,9 @@ services:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
     environment:
-      - PUID=1000
-      - PGID=1000
       - TZ=America/New_York
+      - PUID=0
+      - PGID=0
     volumes:
       - /mnt/nas/configs/sonarr:/config
       - /mnt/nas/media:/media
@@ -85,10 +87,9 @@ services:
     restart: unless-stopped
   cross-seed:
     image: ghcr.io/cross-seed/cross-seed:6
-    hostname: cross-seed.internal # allows to communicate with qbit when qbittorrent is under vpn
     container_name: cross-seed
-    userns_mode: host
-    user: 1000:1000
+    hostname: cross-seed.internal
+    user: 0:0
     ports:
       - 2468:2468
     volumes:
@@ -98,3 +99,4 @@ services:
     restart: unless-stopped
 networks: {}
 ```
+
