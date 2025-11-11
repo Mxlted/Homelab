@@ -7,7 +7,7 @@ services:
       - TZ=America/New_York
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_INCLUDE_STOPPED=true
-      - WATCHTOWER_SCHEDULE=0 0 * * * * # runs every hour at minute 0
+      - WATCHTOWER_SCHEDULE=0 0 */6 * * *  # every 6 hours at minute 0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
