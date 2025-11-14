@@ -1,7 +1,7 @@
 ```yaml
 services:
   watchtower:
-    image: containrrr/watchtower
+    image: nickfedor/watchtower
     container_name: watchtower
     environment:
       - TZ=America/New_York
