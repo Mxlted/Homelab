@@ -32,3 +32,7 @@ mount | grep -E "nfs|cifs"
 # Unmount the NFS shares if needed
 umount /mnt/media-nas /mnt/immich-nas
 ```
+Add Mounts to LXC
+
+    mp0: /mnt/media-nas,mp=/mnt/nas
+    mp1: /mnt/ssd,mp=/mnt/ssd
