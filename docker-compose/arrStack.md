@@ -14,7 +14,7 @@ services:
       - TZ=America/New_York
       - WEBUI_PORTS=8080/tcp,8080/udp
       - VPN_ENABLED=true
-      - VPN_CONF=wg0backup
+      - VPN_CONF=wg0
       - VPN_PROVIDER=generic
       - VPN_LAN_NETWORK=192.168.1.0/24
       - VPN_LAN_LEAK_ENABLED=false
@@ -43,7 +43,7 @@ services:
       - PUID=0
       - PGID=0
     volumes:
-      - /mnt/nas/configs/prowlarr:/config
+      - /mnt/ssd/configs/prowlarr:/config
       - /mnt/nas/media/:/media/
     ports:
       - 9696:9696
@@ -56,7 +56,7 @@ services:
       - PUID=0
       - PGID=0
     volumes:
-      - /mnt/nas/configs/radarr:/config
+      - /mnt/ssd/configs/radarr:/config
       - /mnt/nas/media:/media
     ports:
       - 7878:7878
@@ -69,7 +69,7 @@ services:
       - PUID=0
       - PGID=0
     volumes:
-      - /mnt/nas/configs/sonarr:/config
+      - /mnt/ssd/configs/sonarr:/config
       - /mnt/nas/media:/media
     ports:
       - 8989:8989
@@ -93,10 +93,11 @@ services:
     ports:
       - 2468:2468
     volumes:
-      - /mnt/nas/configs/crossseed:/config
+      - /mnt/ssd/configs/crossseed:/config
       - /mnt/nas/media:/media
     command: daemon
     restart: unless-stopped
 networks: {}
 ```
+
 
