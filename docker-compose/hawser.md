@@ -1,3 +1,4 @@
+```yaml
 services:
   hawser:
     image: ghcr.io/finsys/hawser:latest
@@ -12,3 +13,4 @@ services:
       - hawser_stacks:/data/stacks
 volumes:
   hawser_stacks:
+```
