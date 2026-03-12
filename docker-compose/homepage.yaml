@@ -1,0 +1,18 @@
+services:
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    ports:
+      - 3000:3000
+    # Mount your full config dir (YAMLs + custom.css)
+    volumes:
+      - /mnt/ssd/configs/homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Pull all sensitive values from an env file
+    env_file:
+      - .env
+    # Non-secret env (fine to keep inline)
+    environment:
+      HOMEPAGE_ALLOWED_HOSTS: home.umusig.com,192.168.1.116:3000
+    restart: unless-stopped
+networks: {}
