@@ -1,0 +1,16 @@
+```yaml
+services:
+  dockhand:
+    image: fnsys/dockhand:latest
+    container_name: dockhand
+    restart: unless-stopped
+    ports:
+      - 4000:3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockhand_data:/app/data
+      - /opt/stacks:/opt/stacks
+volumes:
+  dockhand_data: null
+networks: {}
+```
