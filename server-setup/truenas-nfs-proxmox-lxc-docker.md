@@ -1,6 +1,6 @@
-# TrueNAS → Proxmox → Unprivileged LXC → Docker: Persistent NFS Storage Guide
+# TrueNAS → Proxmox → Unprivileged LXC → Docker: Persistent NFS Storage
 
-> A step-by-step guide to mounting a TrueNAS NFS share on Proxmox, binding it into an **unprivileged LXC container**, and configuring Docker access while preserving **UID/GID consistency (user 1000)** across all layers.
+> A step-by-step guide to mounting a TrueNAS NFS share on Proxmox, binding it into an unprivileged LXC container, and configuring Docker access while preserving **UID/GID consistency (user 1000)** across all layers.
 
 ![Proxmox](https://img.shields.io/badge/Proxmox-7%2B-orange?logo=proxmox)
 ![TrueNAS](https://img.shields.io/badge/TrueNAS-NFS-blue?logo=truenas)
@@ -9,113 +9,127 @@
 
 ---
 
-## 🧩 Overview
+## Table of Contents
 
-This guide walks through how to mount a **TrueNAS NFS share** to a **Proxmox host**, bind it into an **unprivileged LXC container**, and then allow **Docker** within that container to use the share directly.  
-The focus is on maintaining **consistent file ownership and permissions** (UID/GID = 1000) between TrueNAS, Proxmox, and Docker — enabling seamless shared storage access without permission mismatches or root escalation issues.
-
----
-
-## 💭 Personal
-
-My goal with this setup was to build a single, efficient system that could serve as both a NAS and an application host, without needing extra hardware or drives just for apps.
-
-While TrueNAS is excellent for storage and data protection, running it bare metal comes with a major limitation:  
-you cannot install or run apps directly on the boot drive or pool. To add Docker, containers, or other applications, you would need a separate physical drive or pool dedicated to those apps.
-
-Instead of going that route, I chose to run TrueNAS as a virtual machine inside Proxmox.  
-This lets me:
-- Use the Proxmox host for applications, containers, and services such as Docker, Sonarr, and Radarr  
-- Keep TrueNAS as a dedicated NAS focused purely on storage and file sharing  
-- Take advantage of drive passthrough so TrueNAS still has full control over the disks  
-- Treat TrueNAS as a plug-and-play NAS appliance that I can migrate or restore easily
-
-In this configuration, Proxmox handles the apps and workloads, while TrueNAS provides networked NFS storage.  
-This keeps everything reliable, modular, and flexible.
+- [Overview](#overview)
+- [Background](#background)
+- [System Configuration](#system-configuration)
+- [Step 1: Add the NFS Share to Proxmox](#step-1-add-the-nfs-share-to-proxmox)
+- [Step 2: Create a Local Mount Point and Configure fstab](#step-2-create-a-local-mount-point-and-configure-fstab)
+- [Step 3: Bind-Mount into the Unprivileged LXC](#step-3-bind-mount-into-the-unprivileged-lxc)
+- [Step 4: ID Mapping to Preserve UID/GID 1000](#step-4-id-mapping-to-preserve-uidgid-1000)
+- [Step 5: Pre-Create Docker Bind Mount Directories](#step-5-pre-create-docker-bind-mount-directories)
+- [Verification](#verification)
 
 ---
 
-## 🖥️ System Configuration
+## Overview
 
-This setup was built and tested on the following hardware and virtualization configuration.  
-Your specs don’t need to match exactly, but they can help provide context for performance and behavior.
+This guide covers how to mount a TrueNAS NFS share to a Proxmox host, bind it into an unprivileged LXC container, and allow Docker within that container to use the share directly. The focus is on maintaining consistent file ownership and permissions (UID/GID = 1000) between TrueNAS, Proxmox, and Docker — enabling seamless shared storage access without permission mismatches or root escalation issues.
+
+---
+
+## Background
+
+The goal of this setup is a single, efficient system that serves as both a NAS and an application host without requiring extra dedicated hardware.
+
+TrueNAS is excellent for storage and data protection, but running it bare metal comes with a significant limitation: you cannot install or run apps directly on the boot drive or pool. Adding Docker or other applications requires a separate physical drive or pool.
+
+Rather than that approach, this setup runs TrueNAS as a VM inside Proxmox, which allows:
+
+- Using the Proxmox host for applications and services (Docker, Sonarr, Radarr, etc.)
+- Keeping TrueNAS as a dedicated NAS focused purely on storage and file sharing
+- HDD passthrough so TrueNAS retains full control over the disks
+- Treating TrueNAS as a portable appliance that can be migrated or restored independently
+
+Proxmox handles workloads; TrueNAS provides networked NFS storage.
+
+---
+
+## System Configuration
 
 | Component | Details |
-|------------|----------|
-| **CPU (current)** | Intel Core i3-12100 |
-| **Planned upgrade** | Intel Core i7-12700K *(guide may or may not be updated post-upgrade)* |
-| **OS and Apps drive** | PNY CS3140 4 TB NVMe SSD |
-| **Storage drives** | 3 × WD Red Plus 8 TB HDDs |
+|-----------|---------|
+| **CPU** | Intel Core i7-12700K |
+| **OS / Apps drive** | PNY CS3140 4 TB NVMe SSD |
+| **Storage drives** | 4 × WD Red Plus 8 TB HDD |
 | **Host platform** | Proxmox VE |
-| **TrueNAS deployment** | Running as a **VM** (not an LXC) on the same Proxmox host |
-| **Drive configuration** | HDDs are **passed through** directly to the TrueNAS VM |
-| **Shared storage** | TrueNAS NFS share exported to the Proxmox host and bind-mounted into an unprivileged LXC running Docker |
-| **NFS export settings** | The NFS share uses **mapall** to the user corresponding to **UID 1000**, ensuring consistent ownership and permissions across TrueNAS, Proxmox, LXC, and Docker layers. |
+| **TrueNAS deployment** | VM (not LXC) on the same Proxmox host |
+| **Drive configuration** | HDDs passed through directly to the TrueNAS VM |
+| **Shared storage** | TrueNAS NFS share exported to Proxmox, bind-mounted into an unprivileged LXC running Docker |
+| **NFS export settings** | `mapall` mapped to UID 1000, ensuring consistent ownership across all layers |
 
-> 🧠 Note: Since TrueNAS runs as a VM with direct disk passthrough, all NFS performance and permission consistency depend on proper passthrough configuration and NFS export settings (especially `mapall`).
-
----
-
-## 🗄️ Step 1: Add the NFS Share to Proxmox
-
-1. In the **Proxmox Web UI**, navigate to:  
-   **Datacenter → Storage → Add → NFS**
-
-2. Fill out the required NFS details:
-   - **ID:** A friendly name for your storage (e.g., `truenas-nfs`)
-   - **Server:** The IP address or hostname of your TrueNAS server
-   - **Export:** The exported NFS path (e.g., `/mnt/pool1/docker-share`)
-   - **Content:** Select what the storage will be used for (e.g., `Disk image`, `Container`, `ISO image`, or `VZDump backup file`)
-   - **Nodes:** Choose the Proxmox node(s) that should have access
-   - **Options:** 
-     - Check **Enable**
-     - (Optional) Enable **Backup**, **ISO**, or **Container** depending on your use case
-
-3. Click **Add** to finalize and mount the NFS share in Proxmox.
-
-✅ **Tip:** Verify the NFS share by going to **Datacenter → Storage**, selecting your NFS entry, and checking the **Status** tab. It should show **Active**.
+> **Note:** Since TrueNAS runs as a VM with direct disk passthrough, NFS performance and permission consistency depend on proper passthrough configuration and NFS export settings — particularly `mapall`.
 
 ---
 
-## 📁 Step 2: Create a Local Mount Point and Connect NFS via /etc/fstab
+## Step 1: Add the NFS Share to Proxmox
 
-Once your NFS share is added to Proxmox, create a local directory where it will be mounted.  
-This directory will act as the access point for the NFS share on the host.
+1. In the Proxmox web UI, navigate to **Datacenter → Storage → Add → NFS**.
+
+2. Fill in the required fields:
+   - **ID** — a friendly name for the storage entry (e.g., `truenas-nfs`)
+   - **Server** — IP address or hostname of your TrueNAS server
+   - **Export** — the exported NFS path (e.g., `/mnt/pool1/docker-share`)
+   - **Content** — select intended use types (e.g., `Disk image`, `Container`, `ISO image`, `VZDump backup file`)
+   - **Nodes** — select which Proxmox nodes should have access
+   - Check **Enable**
+
+3. Click **Add**.
+
+To verify, go to **Datacenter → Storage**, select the new entry, and confirm the **Status** tab shows **Active**.
+
+---
+
+## Step 2: Create a Local Mount Point and Configure fstab
+
+Create the directory that will serve as the local mount point on the Proxmox host:
 
 ```bash
 mkdir -p /mnt/<mount-point>
 ```
 
-Now, edit your `/etc/fstab` file to automatically mount the NFS share on boot:
+Open `/etc/fstab` for editing:
 
 ```bash
 nano /etc/fstab
 ```
 
-Add the following line (replace placeholders with your own details):
+### Kernel Version Compatibility
 
-```bash
-<server-ip>:/mnt/<pool>/<dataset>   /mnt/<mount-point>   nfs4  rw,noatime,_netdev,x-systemd.automount,noauto,nofail,retry=5,timeo=14  0  0
+The mount options below apply to **PVE kernel 6.17.13 and later**. If you are on 6.17.9 or earlier, refer to the legacy entry.
+
+**PVE kernel ≤ 6.17.9**
+
+```
+<server-ip>:/mnt/<pool>/<dataset>   /mnt/<mount-point>   nfs4   rw,vers=4.1,noatime,_netdev,x-systemd.automount,hard,timeo=600,retrans=5,x-systemd.idle-timeout=600   0   0
 ```
 
-### ⚙️ Explanation
+**PVE kernel ≥ 6.17.13 (current)**
 
-| Parameter                           | Description                                                                     |
-| ----------------------------------- | ------------------------------------------------------------------------------- |
-| `<server-ip>:/mnt/<pool>/<dataset>` | The **TrueNAS NFS share** in the format `IP:/mnt/pool/dataset`                  |
-| `/mnt/<mount-point>`                | The **local directory** on your Proxmox host where the share will be mounted    |
-| `nfs4`                              | Specifies the **NFS version 4** protocol                                        |
-| `rw`                                | Mounts the share with **read and write** access                                 |
-| `noatime`                           | Disables updating access timestamps — improves I/O performance                  |
-| `_netdev`                           | Delays mounting until the **network stack** is available                        |
-| `x-systemd.automount`               | Enables **on-demand mounting** instead of at boot, preventing boot hangs        |
-| `noauto`                            | Prevents automatic mounting at boot (automount handles it)                      |
-| `nofail`                            | Allows the system to **boot normally even if the share is unavailable**         |
-| `retry=5`                           | Retries the mount up to **5 times** before giving up                            |
-| `timeo=14`                          | Sets the NFS **timeout** to 1.4 seconds per attempt                             |
-| `0 0`                               | Disables **dump** and **filesystem checks** for this entry (not needed for NFS) |
+```
+<server-ip>:/mnt/<pool>/<dataset>   /mnt/<mount-point>   nfs4   rw,vers=4.1,noatime,_netdev,x-systemd.automount,hard,timeo=600,retrans=5,x-systemd.idle-timeout=600   0   0
+```
 
-✅ **Pro tip:** After saving `/etc/fstab`, test the mount immediately without rebooting:
+### Mount Option Reference
+
+| Option | Description |
+|--------|-------------|
+| `nfs4` | NFS version 4 filesystem type |
+| `vers=4.1` | Explicitly requests NFS 4.1 (supports pNFS and session trunking) |
+| `rw` | Read and write access |
+| `noatime` | Disables access time updates — reduces unnecessary I/O |
+| `_netdev` | Defers mount until the network stack is ready |
+| `x-systemd.automount` | On-demand mounting via systemd; prevents boot hangs if the share is unavailable |
+| `hard` | Retries NFS requests indefinitely until the server responds; safer than `soft` for data integrity |
+| `timeo=600` | NFS timeout per attempt in tenths of a second (600 = 60 seconds) |
+| `retrans=5` | Number of retries before the client reports an error |
+| `x-systemd.idle-timeout=600` | Unmounts the share automatically after 600 seconds of inactivity |
+| `0 0` | Disables dump and fsck for this entry (standard for NFS) |
+
+> **`hard` vs `nofail`:** A `hard` mount will block if the NFS server is unreachable at mount time. If you need the system to boot cleanly without TrueNAS available, consider adding `nofail` as well.
+
+After saving, test the mount without rebooting:
 
 ```bash
 mount -a
@@ -123,19 +137,19 @@ mount -a
 
 ---
 
-## 🧩 Step 3: Bind-Mount the Host NFS into the Unprivileged LXC
+## Step 3: Bind-Mount into the Unprivileged LXC
 
-Use `pct set` to attach the host mount (created in Step 2) into your container.
+Use `pct set` to attach the host NFS mount path into your container:
 
 ```bash
-# Replace placeholders:
-# <ctid>           = your LXC container ID (e.g., 200)
-# <host-mount>     = the host path where NFS is mounted (e.g., /mnt/media-nas)
-# <container-path> = the path inside the container where you want it mounted (e.g., /mnt/nas)
+# <ctid>           — LXC container ID (e.g., 200)
+# <host-mount>     — host path of the NFS mount (e.g., /mnt/media-nas)
+# <container-path> — path inside the container (e.g., /mnt/nas)
+
 pct set <ctid> --mp0 <host-mount>,mp=<container-path>
 ```
 
-Reboot or restart the container to ensure the mount is active:
+Restart the container to activate the mount:
 
 ```bash
 pct reboot <ctid>
@@ -145,39 +159,38 @@ pct stop <ctid> && pct start <ctid>
 
 ---
 
-## 🔐 Step 4: (Advanced) ID Mapping to Preserve UID/GID 1000 for Docker
+## Step 4: ID Mapping to Preserve UID/GID 1000
 
-> ⚠️ **Warning:** Modifying user namespace mappings on unprivileged containers can weaken isolation if misconfigured. Proceed only if you understand the implications and have backups.
+> **Warning:** Modifying user namespace mappings on unprivileged containers can weaken isolation if misconfigured. Proceed only if you understand the implications and have a backup of your container config.
 
 ### 4.1 Allow the host to map UID/GID 1000
 
-Edit these files **on the Proxmox host**:
+On the Proxmox host, edit both subordinate ID files:
 
 ```bash
-sudo nano /etc/subuid
-sudo nano /etc/subgid
+nano /etc/subuid
+nano /etc/subgid
 ```
 
-Add or adjust entries:
+Add or update the following entries. Comment out existing entries so they can be restored if needed:
 
-```text
+```
 # /etc/subuid
-# comment out what you originally had so you can go back and restore
 root:100000:65536
 root:1000:1
 ```
-```text
+
+```
 # /etc/subgid
-# comment out what you originally had so you can go back and restore
 root:100000:65536
 root:1000:1
 ```
 
 ### 4.2 Add custom ID maps to the container config
 
-Edit `/etc/pve/lxc/<ctid>.conf`:
+Edit `/etc/pve/lxc/<ctid>.conf` and add:
 
-```text
+```
 lxc.idmap: u 0 100000 1000
 lxc.idmap: u 1000 1000 1
 lxc.idmap: u 1001 101001 64535
@@ -195,18 +208,11 @@ pct restart <ctid>
 
 ---
 
-## ⚠️ Step 5: Pre-Create Docker Bind Mount Directories (Avoid Permission Conflicts)
+## Step 5: Pre-Create Docker Bind Mount Directories
 
-Before running Docker containers that map volumes to your NFS share, **make sure the directories exist** on the mounted share.  
-Docker tends to **create missing folders as root-mapped 100000**, not as user 1000, which can cause permission issues.
+Before starting any Docker containers that mount paths from the NFS share, create the required directories manually. If Docker creates them at runtime, it will assign root-shifted ownership (`100000:100000`) rather than `1000:1000`, which causes permission failures.
 
-### 🧩 Why This Matters
-
-If Docker creates a directory itself, it inherits shifted UID mappings, resulting in folders owned by `100000:100000` on the host.
-
-### ✅ The Fix
-
-Create the full folder structure **manually** before starting Docker, and set ownership to user 1000.
+Create the directory structure and set ownership before launching containers:
 
 ```bash
 mkdir -p /mnt/nas/configs/sonarr
@@ -215,7 +221,7 @@ chown -R 1000:1000 /mnt/nas/configs
 chown -R 1000:1000 /mnt/nas/media
 ```
 
-Example Docker Compose snippet:
+Example Docker Compose volume configuration:
 
 ```yaml
 volumes:
@@ -223,14 +229,13 @@ volumes:
   - /mnt/nas/media:/media
 ```
 
-As long as these directories exist and are owned by UID/GID 1000 **before** Docker initializes them,  
-permissions will remain consistent across the NFS share.
+As long as the directories exist and are owned by UID/GID 1000 before Docker initializes them, permissions will remain consistent across the NFS share.
 
 ---
 
-### ✅ Verification
+## Verification
 
-Inside the container:
+Run the following inside the container to confirm ownership and write access:
 
 ```bash
 id
@@ -238,7 +243,10 @@ stat -c "%u:%g %n" <container-path>
 touch <container-path>/testfile && ls -l <container-path>/testfile
 ```
 
-On the host, confirm ownership appears as `1000:1000`.
+On the Proxmox host, confirm the files appear as `1000:1000`.
 
-> 💡 If ownership doesn’t match, re-check `/etc/subuid`, `/etc/subgid`, and `lxc.idmap` for overlaps or typos.  
-> Also ensure your NFS export isn’t applying `all_squash` or `root_squash`.
+If ownership is incorrect, check for:
+
+- Overlapping or missing entries in `/etc/subuid` and `/etc/subgid`
+- Typos in the `lxc.idmap` lines in the container config
+- NFS export settings applying `all_squash` or `root_squash` on the TrueNAS side
