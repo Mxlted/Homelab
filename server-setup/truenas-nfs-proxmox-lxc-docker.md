@@ -97,19 +97,31 @@ nano /etc/fstab
 
 ### Kernel Version Compatibility
 
-The mount options below apply to **PVE kernel 6.17.13 and later**. If you are on 6.17.9 or earlier, refer to the legacy entry.
-
 **PVE kernel ≤ 6.17.9**
 
 ```
 <server-ip>:/mnt/<pool>/<dataset>   /mnt/<mount-point>   nfs4   rw,vers=4.1,noatime,_netdev,x-systemd.automount,hard,timeo=600,retrans=5,x-systemd.idle-timeout=600   0   0
 ```
 
-**PVE kernel ≥ 6.17.13 (current)**
+**PVE kernel ≥ 6.17.13**
 
 ```
 <server-ip>:/mnt/<pool>/<dataset>   /mnt/<mount-point>   nfs4   rw,vers=4.1,noatime,_netdev,x-systemd.automount,hard,timeo=600,retrans=5,x-systemd.idle-timeout=600   0   0
 ```
+
+If you are still experiencing IO pressure stall issues on this kernel, you have two options:
+
+**Option A — Pin back to 6.17.9-1-pve:**
+
+```bash
+proxmox-boot-tool kernel pin 6.17.9-1-pve
+```
+
+Then reboot. This is the simpler fix if the stall is reproducible and you want to stay on the Proxmox host-side mount approach.
+
+**Option B — Mount within the LXC itself instead of on the Proxmox host:**
+
+Rather than mounting the NFS share on the host and bind-mounting it into the container, configure the NFS mount directly inside the LXC. This sidesteps the host kernel's IO pressure accounting for NFS entirely. Add the share to `/etc/fstab` inside the container the same way you would on any Linux system, and skip Steps 2 and 3 of this guide. Note that the container will need the `nfs` feature flag enabled in its config (`features: nfs=1`) for this to work in an unprivileged context.
 
 ### Mount Option Reference
 
