@@ -96,17 +96,17 @@ nano /etc/fstab
 ```
 
 Add the following entry to `/etc/fstab` on the Proxmox host:
- 
+
 ```
-<server-ip>:/mnt/<pool>/<dataset>   /mnt/<mount-point>   nfs4   rw,vers=4.1,noatime,_netdev,x-systemd.automount,hard,timeo=600,retrans=5,x-systemd.idle-timeout=600   0   0
+<server-ip>:/mnt/<pool>/<dataset>   /mnt/<mount-point>   nfs4   rw,vers=4.1,noatime,_netdev,x-systemd.automount,softerr,timeo=30,retrans=2,rsize=1048576,wsize=1048576   0   0
 ```
- 
+
 Replace each placeholder with your actual values:
- 
+
 - `<server-ip>` — the IP address of your TrueNAS or NFS server
 - `<pool>` — the ZFS pool name on the server
 - `<dataset>` — the dataset path being exported
-- `<mount-point>` — the directory name you created on the Proxmox host (e.g. `/mnt/truenas-media`)
+- `<mount-point>` — the directory name you created on the Proxmox host (e.g., `/mnt/truenas-media`)
 
 ### Mount Option Reference
 
@@ -118,13 +118,14 @@ Replace each placeholder with your actual values:
 | `noatime` | Disables access time updates — reduces unnecessary I/O |
 | `_netdev` | Defers mount until the network stack is ready |
 | `x-systemd.automount` | On-demand mounting via systemd; prevents boot hangs if the share is unavailable |
-| `hard` | Retries NFS requests indefinitely until the server responds; safer than `soft` for data integrity |
-| `timeo=600` | NFS timeout per attempt in tenths of a second (600 = 60 seconds) |
-| `retrans=5` | Number of retries before the client reports an error |
-| `x-systemd.idle-timeout=600` | Unmounts the share automatically after 600 seconds of inactivity |
+| `softerr` | Returns errors to the calling application after retries are exhausted rather than hanging indefinitely; prevents processes from getting stuck if TrueNAS is temporarily unreachable |
+| `timeo=30` | NFS timeout per attempt in tenths of a second (30 = 3 seconds) |
+| `retrans=2` | Number of retries before reporting an error to the application |
+| `rsize=1048576` | Maximum read request size in bytes (1 MB); allows larger NFS read operations for better throughput |
+| `wsize=1048576` | Maximum write request size in bytes (1 MB); allows larger NFS write operations for better throughput |
 | `0 0` | Disables dump and fsck for this entry (standard for NFS) |
 
-> **`hard` vs `nofail`:** A `hard` mount will block if the NFS server is unreachable at mount time. If you need the system to boot cleanly without TrueNAS available, consider adding `nofail` as well.
+> **`softerr` vs `hard`:** The `softerr` option (available in newer NFS utils) returns errors to applications when the server is unreachable, rather than blocking indefinitely like `hard`. This prevents processes from hanging if TrueNAS goes down temporarily, while still surfacing the failure so applications can handle it. If you prefer indefinite retry behavior for data integrity, switch to `hard` and increase `timeo` accordingly.
 
 After saving, test the mount without rebooting:
 
