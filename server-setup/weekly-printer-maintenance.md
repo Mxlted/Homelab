@@ -65,6 +65,24 @@ The output should show the updated URI.
 
 ---
 
+## Remove the Printer
+
+To fully remove the printer from CUPS, delete the queue:
+
+```bash
+sudo lpadmin -x EpsonNet
+```
+
+Verify it has been removed:
+
+```bash
+lpstat -p
+```
+
+The printer should no longer appear in the list. Any pending jobs for that queue will also be discarded.
+
+---
+
 ## Test Print
 
 Run a manual print to confirm printer functionality.
