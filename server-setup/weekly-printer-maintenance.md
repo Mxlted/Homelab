@@ -1,50 +1,100 @@
-Printer Setup and Weekly Test Page Automation
+# Printer Setup and Scheduled Test Page Automation
 
-This guide covers configuring an Epson network printer on a Debian
-server inside a Proxmox LXC container and scheduling a weekly automatic
-test print to prevent inkjet clogging.
+This guide covers configuring an Epson network printer on a Debian server inside a Proxmox LXC container and scheduling automatic test prints to prevent inkjet clogging.
 
-Install CUPS
+---
+
+## Install CUPS
 
 Update package lists and install CUPS along with required components.
 
-    sudo apt update
-    sudo apt install cups cups-client cups-daemon
+```bash
+sudo apt update
+sudo apt install cups cups-client cups-daemon
+```
 
 Enable and start the CUPS service.
 
-    sudo systemctl enable --now cups
+```bash
+sudo systemctl enable --now cups
+```
 
-Add the Epson Network Printer
+---
 
-The printer is reachable at the network address 192.168.1.251. Configure
-it using IPP Everywhere.
+## Add the Epson Network Printer
 
-    sudo lpadmin -p EpsonNet   -E   -v ipp://192.168.1.251/ipp/print   -m everywhere
+The printer is reachable at `192.168.1.251`. Configure it using IPP Everywhere.
+
+```bash
+sudo lpadmin -p EpsonNet \
+  -E \
+  -v ipp://192.168.1.251/ipp/print \
+  -m everywhere
+```
 
 Enable the printer and allow it to accept print jobs.
 
-    sudo cupsenable EpsonNet
-    sudo cupsaccept EpsonNet
+```bash
+sudo cupsenable EpsonNet
+sudo cupsaccept EpsonNet
+```
 
-Test Print
+---
+
+## Updating the Printer IP Address
+
+If the printer is assigned a new IP address, update the existing CUPS queue to point to it. No need to delete and recreate the printer. Just re-run `lpadmin` with the new URI:
+
+```bash
+sudo lpadmin -p EpsonNet -v ipp://NEW_IP_HERE/ipp/print
+```
+
+For example, if the new address is `192.168.1.100`:
+
+```bash
+sudo lpadmin -p EpsonNet -v ipp://192.168.1.100/ipp/print
+```
+
+Verify the change took effect:
+
+```bash
+lpstat -v EpsonNet
+```
+
+The output should show the updated URI.
+
+---
+
+## Test Print
 
 Run a manual print to confirm printer functionality.
 
-    /usr/bin/lp -d EpsonNet /root/cronmaster/print/Print_Test.pdf
+```bash
+/usr/bin/lp -d EpsonNet /root/cronmaster/print/Print_Test.pdf
+```
 
-Cron Job for Weekly Test Page
+---
 
-To prevent inkjet clogging, schedule a weekly print every Wednesday at
-noon.
+## Cron Job for Scheduled Test Pages
 
-Edit the crontab:
+To prevent inkjet clogging, schedule automatic test prints using one of the options below.
 
-    crontab -e
+Open the crontab for editing:
 
-Add the following line:
+```bash
+crontab -e
+```
 
-    0 12 * * 3 /usr/bin/lp -d EpsonNet /root/cronmaster/print/Print_Test.pdf
+### Option A: Weekly (every Wednesday at noon)
 
-This will automatically print the specified test page each Wednesday at
-12:00.
+```cron
+0 12 * * 3 /usr/bin/lp -d EpsonNet /root/cronmaster/print/Print_Test.pdf
+```
+
+### Option B: Bi-weekly (1st and 15th of each month at noon)
+
+```cron
+0 12 1,15 * * /usr/bin/lp -d EpsonNet /root/cronmaster/print/Print_Test.pdf
+```
+
+Choose one option and add it to the crontab. If switching from one schedule to the other, remove the old line first.
