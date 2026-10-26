@@ -3,7 +3,7 @@ services:
   qbittorrent:
     hostname: qbittorrent.internal
     container_name: qbittorrent
-    image: ghcr.io/hotio/qbittorrent
+    image: ghcr.io/hotio/qbittorrent:latest
     restart: unless-stopped
     ports:
       - 8080:8080
@@ -15,25 +15,27 @@ services:
       - WEBUI_PORTS=8080/tcp,8080/udp
       - VPN_ENABLED=true
       - VPN_CONF=wg0
-      - VPN_PROVIDER=generic
+      - VPN_PROVIDER=proton
       - VPN_LAN_NETWORK=192.168.1.0/24
       - VPN_LAN_LEAK_ENABLED=false
-      - VPN_EXPOSE_PORTS_ON_LAN=
+      - VPN_EXPOSE_PORTS_ON_LAN
       - VPN_AUTO_PORT_FORWARD=true
-      - VPN_AUTO_PORT_FORWARD_TO_PORTS=5175
-      - VPN_FIREWALL_TYPE=auto
+      - VPN_PORT_REDIRECTS
+      - VPN_NAMESERVERS
       - VPN_HEALTHCHECK_ENABLED=false
-      - VPN_NAMESERVERS=wg
+      - VPN_INTERFACE_PREFIXES
       - PRIVOXY_ENABLED=false
+      - UNBOUND_ENABLED=false
+      - UNBOUND_NAMESERVERS
     cap_add:
       - NET_ADMIN
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv6.conf.all.disable_ipv6=1
     volumes:
-      - /mnt/nas/configs/qbittorrent:/config
-      - /mnt/nas/configs/qbittorrent/cache:/app/qBittorrent/cache
-      - /mnt/nas/configs/qbittorrent/data:/app/qBittorrent/data
+      - /opt/configs/qbittorrent:/config
+      - /opt/configs/qbittorrent/cache:/app/qBittorrent/cache
+      - /opt/configs/qbittorrent/data:/app/qBittorrent/data
       - /mnt/nas/media:/media
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
@@ -43,7 +45,7 @@ services:
       - PUID=0
       - PGID=0
     volumes:
-      - /mnt/ssd/configs/prowlarr:/config
+      - /opt/configs/prowlarr:/config
       - /mnt/nas/media/:/media/
     ports:
       - 9696:9696
@@ -56,7 +58,7 @@ services:
       - PUID=0
       - PGID=0
     volumes:
-      - /mnt/ssd/configs/radarr:/config
+      - /opt/configs/radarr:/config
       - /mnt/nas/media:/media
     ports:
       - 7878:7878
@@ -69,7 +71,7 @@ services:
       - PUID=0
       - PGID=0
     volumes:
-      - /mnt/ssd/configs/sonarr:/config
+      - /opt/configs/sonarr:/config
       - /mnt/nas/media:/media
     ports:
       - 8989:8989
@@ -93,7 +95,7 @@ services:
     ports:
       - 2468:2468
     volumes:
-      - /mnt/ssd/configs/crossseed:/config
+      - /opt/configs/crossseed:/config
       - /mnt/nas/media:/media
     command: daemon
     restart: unless-stopped
