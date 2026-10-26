@@ -10,7 +10,7 @@ Personal homelab setup, configurations, and automation for self-hosted infrastru
 |-----------|---------|
 | **Hypervisor** | Proxmox VE - LXC containers and VM management |
 | **Storage** | Proxmox-managed ZFS `tank` pool: 4 × 8 TB WD Red Plus HDDs in RAIDZ1, with `tank/Media` at `/tank/Media` and `tank/Immich` at `/tank/Immich` (local mounts, no TrueNAS or NFS layer) |
-| **Containers** | Docker inside an unprivileged LXC using host-local ZFS datasets via bind mounts, managed via Dockhand and Hawser for remote stack deployment |
+| **Containers** | Proxmox LXCs: 100 (`Media`), 101 (`Immich`), and 102 (`Cron`); Media and Immich each bind-mount their local ZFS dataset to `/mnt/nas` |
 | **Reverse Proxy** | Pangolin - handles ingress and SSL termination for internal services |
 | **Dashboard** | Homepage - self-hosted service dashboard with Docker socket integration |
 | **DNS / Filtering** | AdGuard Home with OISD blocklist and custom filter rules |
@@ -92,34 +92,36 @@ Infrastructure provisioning, service configuration, troubleshooting, and hardwar
 
 ## Architecture
 
-Proxmox manages the four-drive RAIDZ1 ZFS pool directly and bind-mounts the `/tank/Media` and `/tank/Immich` datasets into the Docker LXC. The Proxmox OS and VM/LXC storage remain on the PNY CS3140 NVMe using LVM/LVM-thin. There is no separate TrueNAS VM or NFS layer.
+Proxmox owns and mounts the four-drive RAIDZ1 pool directly; the Media and Immich LXCs use separate host-local ZFS bind mounts, with no TrueNAS VM or NFS layer. The host OS and VM/LXC root volumes are stored on the PNY CS3140 NVMe via LVM/LVM-thin.
+
+| LXC ID | Name | Host ZFS source | Container mount |
+|--------|------|-----------------|-----------------|
+| **100** | Media | `/tank/Media` | `/mnt/nas` |
+| **101** | Immich | `/tank/Immich` | `/mnt/nas` |
+| **102** | Cron | No ZFS bind mount configured | — |
+
+The mappings above are confirmed by `/etc/pve/lxc/*.conf`. ZFS import and mount services were enabled and completed successfully at the latest inspected host boot (October 23, 2026). Confirm mount availability **inside** each LXC separately when troubleshooting.
 
 ```text
-┌────────────────────────────────────────────────────────────────┐
-│                        Proxmox VE Host                         │
-│                                                                │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                  Host-Managed ZFS Storage                │  │
-│  │   4 × WD Red Plus 8 TB HDDs → RAIDZ1 (tank)              │  │
-│  │   Datasets: /tank/Media and /tank/Immich                 │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                              │                                 │
-│                 Local ZFS / LXC bind mounts                    │
-│                              ▼                                 │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Unprivileged LXC (Docker Host)              │  │
-│  │  ┌────────────────────────────────────────────────────┐  │  │
-│  │  │ Docker Services                                    │  │  │
-│  │  │ • Media Stack (qBit/Sonarr/Radarr/Prowlarr)        │  │  │
-│  │  │ • Homepage Dashboard                               │  │  │
-│  │  │ • Dockhand / Hawser (Stack Management)             │  │  │
-│  │  │ • Watchtower / changedetection.io                  │  │  │
-│  │  └────────────────────────────────────────────────────┘  │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                              │                                 │
-│                    Pangolin Reverse Proxy                      │
-│                              │                                 │
-└──────────────────────────────┼─────────────────────────────────┘
-                               ▼
-                            Internet
+┌─────────────────────────────────────────────────────────────────┐
+│                         Proxmox VE Host                         │
+│                                                                 │
+│  PNY CS3140 4 TB NVMe → Proxmox OS + LVM-thin VM/LXC storage    │
+│                                                                 │
+│  4 × WD Red Plus 8 TB HDDs → ZFS RAIDZ1 pool (tank)             │
+│  ├── /tank/Media ─────── local bind mount ──┐                   │
+│  └── /tank/Immich ────── local bind mount ──┼──────────┐        │
+│                                            │          │        │
+│  ┌─────────────────────────────────────────▼─┐  ┌─────▼──────┐ │
+│  │ LXC 100: Media                            │  │ LXC 101:   │ │
+│  │ /mnt/nas → /tank/Media                     │  │ Immich     │ │
+│  │ Media automation / Docker services        │  │ /mnt/nas   │ │
+│  │                                          │  │            │ │
+│  └──────────────────────────────────────────┘  └────────────┘ │
+│                                                                 │
+│  LXC 102: Cron (no ZFS bind mount configured)                   │
+│                                                                 │
+│  Other infrastructure: Homepage, Dockhand/Hawser, Pangolin,     │
+│  Watchtower, changedetection.io, and supporting services        │
+└─────────────────────────────────────────────────────────────────┘
 ```
