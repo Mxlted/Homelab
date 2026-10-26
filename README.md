@@ -85,6 +85,7 @@ Infrastructure provisioning, service configuration, troubleshooting, and hardwar
 | [portfolio-setup.md](./server-setup/portfolio-setup.md) | Nginx:Alpine portfolio deployment bound to internal Docker bridge (`172.19.0.1:7373`) behind Pangolin to prevent direct public exposure |
 | [proxmox-discord-notifications.md](./server-setup/proxmox-discord-notifications.md) | Proxmox → Discord webhook integration for system alerts - includes UI config, JSON body template, and secret management |
 | [truenas-nfs-proxmox-lxc-docker.md](./server-setup/truenas-nfs-proxmox-lxc-docker.md) | Complete guide: TrueNAS NFS → Proxmox → unprivileged LXC → Docker with UID/GID 1000 mapping and fstab options |
+| [truenas-pool-to-proxmox.md](./server-setup/truenas-pool-to-proxmox.md) | Migrate an existing TrueNAS VM ZFS pool to the Proxmox host without recreating it, including passthrough removal, local mounts, verification, and rollback |
 | [weekly-printer-maintenance.md](./server-setup/weekly-printer-maintenance.md) | CUPS setup for Epson network printer with cron-scheduled test prints to prevent inkjet clogging |
 
 ---
