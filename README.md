@@ -9,8 +9,8 @@ Personal homelab setup, configurations, and automation for self-hosted infrastru
 | Component | Details |
 |-----------|---------|
 | **Hypervisor** | Proxmox VE - LXC containers and VM management |
-| **Storage** | Proxmox-managed ZFS `tank` pool: 4 × 8 TB WD Red Plus HDDs in RAIDZ1, with `tank/Media` at `/tank/Media` and `tank/Immich` at `/tank/Immich` (local mounts, no TrueNAS or NFS layer) |
-| **Containers** | Proxmox LXCs: 100 (`Media`), 101 (`Immich`), and 102 (`Cron`); Media and Immich each bind-mount their local ZFS dataset to `/mnt/nas` |
+| **Storage** | Locally managed on Proxmox, with storage bind-mounted into LXC containers |
+| **Containers** | Media (Docker services), Immich, and Cron LXCs; Docker managed with Dockhand and Hawser |
 | **Reverse Proxy** | Pangolin - handles ingress and SSL termination for internal services |
 | **Dashboard** | Homepage - self-hosted service dashboard with Docker socket integration |
 | **DNS / Filtering** | AdGuard Home with OISD blocklist and custom filter rules |
@@ -92,27 +92,30 @@ Infrastructure provisioning, service configuration, troubleshooting, and hardwar
 
 ## Architecture
 
-Proxmox owns and mounts the four-drive RAIDZ1 pool directly; the Media and Immich LXCs use separate host-local ZFS bind mounts, with no TrueNAS VM or NFS layer. The host OS and VM/LXC root volumes are stored on the PNY CS3140 NVMe via LVM/LVM-thin.
-
-| LXC ID | Name | Host ZFS source | Container mount |
-|--------|------|-----------------|-----------------|
-| **100** | Media | `/tank/Media` | `/mnt/nas` |
-| **101** | Immich | `/tank/Immich` | `/mnt/nas` |
-| **102** | Cron | No ZFS bind mount configured | — |
-
-The mappings above are confirmed by `/etc/pve/lxc/*.conf`. ZFS import and mount services were enabled and completed successfully at the latest inspected host boot (October 23, 2026). Confirm mount availability **inside** each LXC separately when troubleshooting.
-
 ```text
-Proxmox VE Host
-├── PNY CS3140 4 TB NVMe
-│   ├── Proxmox OS (LVM)
-│   └── VM / LXC root disks (LVM-thin)
-├── ZFS pool: tank (RAIDZ1, 4 × WD Red Plus 8 TB)
-│   ├── tank/Media  (/tank/Media)
-│   │   └── Local bind mount → LXC 100: Media  (/mnt/nas)
-│   └── tank/Immich (/tank/Immich)
-│       └── Local bind mount → LXC 101: Immich (/mnt/nas)
-├── LXC 102: Cron (no ZFS bind mount configured)
-└── Services: Docker media stack, Homepage, Dockhand/Hawser,
-    Pangolin, Watchtower, changedetection.io, and others
+┌─────────────────────────────────────────────────────────────────┐
+│                         Proxmox VE Host                         │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                       Local Storage                       │  │
+│  │                  Media + Immich data                      │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                  │
+│                        Bind Mounts                              │
+│                              ▼                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                       LXC Containers                      │  │
+│  │  ┌─────────────────────────────────────────────────────┐  │  │
+│  │  │                 Media (100) / Docker                │  │  │
+│  │  │  • Media Stack (qBit/Sonarr/Radarr/Prowlarr)       │  │  │
+│  │  │  • Homepage Dashboard                              │  │  │
+│  │  │  • Dockhand / Hawser (Stack Management)            │  │  │
+│  │  │  • Watchtower / changedetection.io                 │  │  │
+│  │  └─────────────────────────────────────────────────────┘  │  │
+│  │             Immich (101)  •  Cron (102)                   │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                  │
+│                    Pangolin Reverse Proxy                       │
+│                              ▼                                  │
+└─────────────────────────────────────────────────────────────────┘
+                           Internet
 ```
