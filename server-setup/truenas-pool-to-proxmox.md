@@ -17,6 +17,7 @@
 - [Overview](#overview)
 - [Original Setup (Before Migration)](#original-setup-before-migration)
 - [Verified Host Configuration After Migration](#verified-host-configuration-after-migration)
+- [Verified LXC Dataset Bind Mounts](#verified-lxc-dataset-bind-mounts)
 - [Requirements and Preflight](#requirements-and-preflight)
 - [Step 1: Record the Current Pool and VM Configuration](#step-1-record-the-current-pool-and-vm-configuration)
 - [Step 2: Stop Services Using TrueNAS Storage](#step-2-stop-services-using-truenas-storage)
@@ -89,6 +90,38 @@ The Proxmox host shell output from **October 26, 2026** confirmed the following 
 | **Proxmox-managed VM disks** | NVMe-backed LVM-thin storage (`local-lvm`); `tank` need not be registered with `pvesm` to be used by LXC bind mounts |
 
 These verified values describe the **completed migration**, not what the historical TrueNAS VM originally mounted. Before reusing the procedural commands on a different host, always recheck live ZFS mountpoints and disk membership.
+
+### Verified LXC Dataset Bind Mounts
+
+Proxmox inspection on **October 26, 2026** confirmed the following configurations:
+
+| CTID | Container | LXC mount entry | Status |
+|------|-----------|-----------------|--------|
+| `100` | `Media` | `mp0: /tank/Media,mp=/mnt/nas` | Running |
+| `101` | `Immich` | `mp0: /tank/Immich,mp=/mnt/nas` | Running |
+| `102` | `Cron` | No `mpN` entry shown | Running |
+
+Host-side `findmnt -T /tank/Media` and `findmnt -T /tank/Immich` both showed ZFS-backed mounts. Both `zfs-import-cache.service` and `zfs-mount.service` were enabled and completed successfully during the October 23, 2026 boot. This verifies the host's import/mount path, **not** application access or startup ordering inside the LXCs.
+
+Confirm runtime access inside the containers before relying on the mounts:
+
+```bash
+pct exec 100 -- findmnt -T /mnt/nas
+pct exec 101 -- findmnt -T /mnt/nas
+pct exec 100 -- ls -la /mnt/nas
+pct exec 101 -- ls -la /mnt/nas
+```
+
+To inspect automatic LXC startup settings:
+
+```bash
+pct config 100 | grep -E '^(onboot|startup|mp[0-9]+):'
+pct config 101 | grep -E '^(onboot|startup|mp[0-9]+):'
+pct config 102 | grep -E '^(onboot|startup|mp[0-9]+):'
+```
+
+Use these checks before changing LXC startup order; an LXC with a bind mount should not start workloads against an unmounted or empty host source directory.
+
 
 ---
 
