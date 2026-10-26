@@ -106,10 +106,10 @@ Infrastructure provisioning, service configuration, troubleshooting, and hardwar
 │  │                       LXC Containers                      │  │
 │  │  ┌─────────────────────────────────────────────────────┐  │  │
 │  │  │                 Media (100) / Docker                │  │  │
-│  │  │  • Media Stack (qBit/Sonarr/Radarr/Prowlarr)       │  │  │
-│  │  │  • Homepage Dashboard                              │  │  │
-│  │  │  • Dockhand / Hawser (Stack Management)            │  │  │
-│  │  │  • Watchtower / changedetection.io                 │  │  │
+│  │  │   • Media Stack (qBit/Sonarr/Radarr/Prowlarr)       │  │  │
+│  │  │   • Homepage Dashboard                              │  │  │
+│  │  │   • Dockhand / Hawser (Stack Management)            │  │  │
+│  │  │   • Watchtower / changedetection.io                 │  │  │
 │  │  └─────────────────────────────────────────────────────┘  │  │
 │  │             Immich (101)  •  Cron (102)                   │  │
 │  └───────────────────────────────────────────────────────────┘  │
