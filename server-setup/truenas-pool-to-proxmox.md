@@ -15,7 +15,8 @@
 ## Table of Contents
 
 - [Overview](#overview)
-- [Current Setup](#current-setup)
+- [Original Setup (Before Migration)](#original-setup-before-migration)
+- [Verified Host Configuration After Migration](#verified-host-configuration-after-migration)
 - [Requirements and Preflight](#requirements-and-preflight)
 - [Step 1: Record the Current Pool and VM Configuration](#step-1-record-the-current-pool-and-vm-configuration)
 - [Step 2: Stop Services Using TrueNAS Storage](#step-2-stop-services-using-truenas-storage)
@@ -35,7 +36,7 @@
 
 ## Overview
 
-The TrueNAS VM currently owns the storage drives and exposes datasets to Proxmox over NFS. This guide moves **ownership of the existing ZFS pool** back to the Proxmox host. ZFS metadata, datasets, snapshots, and the existing RAIDZ layout stay on the original disks.
+Originally, the TrueNAS VM owned the storage drives and exposed datasets to Proxmox over NFS. This guide documents moving **ownership of the existing ZFS pool** back to the Proxmox host. ZFS metadata, datasets, snapshots, and the existing RAIDZ layout stay on the original disks.
 
 The process is:
 
@@ -50,7 +51,7 @@ No `zpool create` or ZFS replication is required when Proxmox can access the ori
 
 ---
 
-## Current Setup
+## Original Setup (Before Migration)
 
 Based on this repository's existing [TrueNAS → Proxmox → LXC → Docker guide](./truenas-nfs-proxmox-lxc-docker.md) and [NFS mount notes](./current-proxmox-nfs-mount.md):
 
@@ -66,9 +67,28 @@ Based on this repository's existing [TrueNAS → Proxmox → LXC → Docker guid
 | **Other pool** | `ssd` with the `ssd/data` dataset and `/mnt/ssd` NFS mount |
 | **Applications** | Docker in an unprivileged Proxmox LXC |
 
-**Scope:** The worked example migrates `tank`. The separate `ssd` pool is **not automatically migrated** with it. Repeat the export/import procedure separately for `ssd` only if you also want Proxmox to own those disks. Do not remove its NFS mount or passthrough until you have migrated it.
+**Scope:** The worked example migrates `tank`. The original TrueNAS setup also referenced an `ssd` pool, but it is **not part of the `tank` migration**. Never remove an unrelated pool's NFS mount or passthrough without checking its actual configuration.
 
 **Expected result:** Proxmox directly owns `tank`, while existing LXC/Docker paths can be preserved. TrueNAS-specific NFS/SMB share definitions, user accounts, and service settings are **not** transferred by a ZFS pool import.
+
+---
+
+## Verified Host Configuration After Migration
+
+The Proxmox host shell output from **October 26, 2026** confirmed the following state (the original setup table above is retained as historical context):
+
+| Component | Verified details |
+|-----------|------------------|
+| **ZFS pool** | `tank`, imported and `ONLINE` directly on Proxmox |
+| **Vdev layout** | Four WD Red Plus 8 TB HDDs in a single RAIDZ1 vdev |
+| **Pool size** | 29.1 TiB raw, with 9.50 TiB allocated and 19.6 TiB raw free at inspection |
+| **Datasets** | `tank/Media` and `tank/Immich` |
+| **Actual host mountpoints** | `/tank/Media` and `/tank/Immich` (not `/mnt/tank/...`) |
+| **Last scrub** | October 11, 2026 — 0 bytes repaired and 0 errors |
+| **Other imported ZFS pools** | None listed; the old `ssd` pool was not present |
+| **Proxmox-managed VM disks** | NVMe-backed LVM-thin storage (`local-lvm`); `tank` need not be registered with `pvesm` to be used by LXC bind mounts |
+
+These verified values describe the **completed migration**, not what the historical TrueNAS VM originally mounted. Before reusing the procedural commands on a different host, always recheck live ZFS mountpoints and disk membership.
 
 ---
 
@@ -262,7 +282,7 @@ zfs get -r -o name,property,value mountpoint,canmount,keystatus tank
 zfs list -r -o name,mountpoint,mounted tank
 ```
 
-TrueNAS commonly uses mountpoints such as `/mnt/tank/Media` and `/mnt/tank/Immich`. **Do not assume** they are correct on Proxmox; use the values shown by `zfs get`.
+On this migrated Proxmox host, the verified ZFS mountpoints are `/tank/Media` and `/tank/Immich`. **Do not assume** these will be correct on another host; use the values shown by `zfs get`.
 
 Check whether any intended target directories are already mounted or contain unrelated files. When mountpoints are correct and there are no conflicts:
 
@@ -277,10 +297,10 @@ zfs mount
 If the properties remain as in the old TrueNAS deployment, verify the datasets:
 
 ```bash
-findmnt -M /mnt/tank/Media
-findmnt -M /mnt/tank/Immich
-ls -la /mnt/tank/Media
-ls -la /mnt/tank/Immich
+findmnt -M /tank/Media
+findmnt -M /tank/Immich
+ls -la /tank/Media
+ls -la /tank/Immich
 ```
 
 If either mount is absent, do not start applications or write data into that directory. Resolve the mountpoint, key, or ZFS issue first.
@@ -312,11 +332,11 @@ nano /etc/fstab
 **If** `zfs get` confirmed the local source paths, replace those lines with:
 
 ```fstab
-/mnt/tank/Immich /mnt/immich-nas none bind,x-systemd.requires-mounts-for=/mnt/tank/Immich 0 0
-/mnt/tank/Media  /mnt/media-nas  none bind,x-systemd.requires-mounts-for=/mnt/tank/Media  0 0
+/tank/Immich /mnt/immich-nas none bind,x-systemd.requires-mounts-for=/tank/Immich 0 0
+/tank/Media  /mnt/media-nas  none bind,x-systemd.requires-mounts-for=/tank/Media  0 0
 ```
 
-Keep the existing `ssd/data` NFS line until that separate pool is migrated. Ensure the destination directories exist:
+If an unrelated `ssd/data` NFS line still exists, leave it alone until its role is verified (the inspected Proxmox host does not currently list an imported `ssd` ZFS pool). Ensure the destination directories exist:
 
 ```bash
 mkdir -p /mnt/immich-nas /mnt/media-nas
@@ -347,7 +367,7 @@ For example, to keep the container's `/mnt/nas` location unchanged:
 
 ```bash
 pct config YOUR_DOCKER_CTID
-pct set YOUR_DOCKER_CTID --mp0 /mnt/tank/Media,mp=/mnt/nas
+pct set YOUR_DOCKER_CTID --mp0 /tank/Media,mp=/mnt/nas
 ```
 
 Only replace `mp0` if that is the **existing** mount index for your media data; use the correct index otherwise. Change other mounts individually as needed. This avoids extra host-side bind mounts but may require updating host applications, Docker Compose paths, and additional containers.
@@ -399,8 +419,8 @@ With dependent LXCs/VMs set **not to auto-start**, perform a planned host reboot
 ```bash
 zpool status -v tank
 zfs list -r -o name,mountpoint,mounted tank
-findmnt -M /mnt/tank/Media
-findmnt -M /mnt/tank/Immich
+findmnt -M /tank/Media
+findmnt -M /tank/Immich
 findmnt -M /mnt/media-nas
 findmnt -M /mnt/immich-nas
 pvesm status
@@ -435,12 +455,12 @@ Do **not** point multiple Proxmox storage IDs at the same underlying VM/LXC volu
 | `tank` not listed by `zpool import` | Verify all disk serials, passed-through devices, controller driver, `/dev/disk/by-id`, and any missing vdev member. |
 | Pool reports it is in use elsewhere | Confirm the TrueNAS VM is fully stopped and the pool was exported; do **not** blindly force-import. |
 | Unsupported ZFS features | Compare installed Proxmox/OpenZFS and TrueNAS versions. Don't upgrade the pool or use destructive recovery flags. |
-| Imported pool, empty `/mnt/tank/...` directory | Check `zfs get mountpoint,canmount,keystatus` and `zfs mount`; don't write into an unmounted directory. |
+| Imported pool, empty `/tank/...` directory | Check `zfs get mountpoint,canmount,keystatus` and `zfs mount`; don't write into an unmounted directory. |
 | Encrypted files are unavailable | Restore/load the appropriate ZFS encryption keys; importing the pool does not unlock them. |
 | LXC/Docker sees permission denied | Check `stat`, `id`, LXC idmaps, and existing ACL type; NFS `mapall` is gone. |
 | Old NFS mount keeps returning | Inspect `/etc/fstab`, active systemd automount units, and Proxmox Datacenter storage entries. |
 | Pool works now but not after reboot | Inspect ZFS import/mount services, `zpool get cachefile`, and host startup ordering. |
-| `ssd/data` still comes from NFS | Expected unless the **separate** `ssd` pool was also migrated. |
+| Old `ssd/data` NFS reference remains | This is a separate historical configuration; inspect current mounts and storage before changing it. |
 
 **Never troubleshoot import problems by erasing labels, rebuilding RAIDZ, creating a replacement pool with the same name, or applying irreversible recovery flags without an independent backup and a verified recovery plan.**
 
