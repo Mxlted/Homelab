@@ -103,25 +103,16 @@ Proxmox owns and mounts the four-drive RAIDZ1 pool directly; the Media and Immic
 The mappings above are confirmed by `/etc/pve/lxc/*.conf`. ZFS import and mount services were enabled and completed successfully at the latest inspected host boot (October 23, 2026). Confirm mount availability **inside** each LXC separately when troubleshooting.
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                         Proxmox VE Host                         │
-│                                                                 │
-│  PNY CS3140 4 TB NVMe → Proxmox OS + LVM-thin VM/LXC storage    │
-│                                                                 │
-│  4 × WD Red Plus 8 TB HDDs → ZFS RAIDZ1 pool (tank)             │
-│  ├── /tank/Media ─────── local bind mount ──┐                   │
-│  └── /tank/Immich ────── local bind mount ──┼──────────┐        │
-│                                            │          │        │
-│  ┌─────────────────────────────────────────▼─┐  ┌─────▼──────┐ │
-│  │ LXC 100: Media                            │  │ LXC 101:   │ │
-│  │ /mnt/nas → /tank/Media                     │  │ Immich     │ │
-│  │ Media automation / Docker services        │  │ /mnt/nas   │ │
-│  │                                          │  │            │ │
-│  └──────────────────────────────────────────┘  └────────────┘ │
-│                                                                 │
-│  LXC 102: Cron (no ZFS bind mount configured)                   │
-│                                                                 │
-│  Other infrastructure: Homepage, Dockhand/Hawser, Pangolin,     │
-│  Watchtower, changedetection.io, and supporting services        │
-└─────────────────────────────────────────────────────────────────┘
+Proxmox VE Host
+├── PNY CS3140 4 TB NVMe
+│   ├── Proxmox OS (LVM)
+│   └── VM / LXC root disks (LVM-thin)
+├── ZFS pool: tank (RAIDZ1, 4 × WD Red Plus 8 TB)
+│   ├── tank/Media  (/tank/Media)
+│   │   └── Local bind mount → LXC 100: Media  (/mnt/nas)
+│   └── tank/Immich (/tank/Immich)
+│       └── Local bind mount → LXC 101: Immich (/mnt/nas)
+├── LXC 102: Cron (no ZFS bind mount configured)
+└── Services: Docker media stack, Homepage, Dockhand/Hawser,
+    Pangolin, Watchtower, changedetection.io, and others
 ```
