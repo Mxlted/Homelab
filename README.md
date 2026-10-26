@@ -101,7 +101,7 @@ Proxmox manages the four-drive RAIDZ1 ZFS pool directly and bind-mounts the `/ta
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                  Host-Managed ZFS Storage                │  │
 │  │   4 × WD Red Plus 8 TB HDDs → RAIDZ1 (tank)              │  │
-│  │   Datasets: /tank/Media and /tank/Immich                  │  │
+│  │   Datasets: /tank/Media and /tank/Immich                 │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                              │                                 │
 │                 Local ZFS / LXC bind mounts                    │
@@ -117,7 +117,7 @@ Proxmox manages the four-drive RAIDZ1 ZFS pool directly and bind-mounts the `/ta
 │  │  └────────────────────────────────────────────────────┘  │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                              │                                 │
-│                    Pangolin Reverse Proxy                     │
+│                    Pangolin Reverse Proxy                      │
 │                              │                                 │
 └──────────────────────────────┼─────────────────────────────────┘
                                ▼
