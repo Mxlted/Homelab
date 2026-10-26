@@ -9,8 +9,8 @@ Personal homelab setup, configurations, and automation for self-hosted infrastru
 | Component | Details |
 |-----------|---------|
 | **Hypervisor** | Proxmox VE - LXC containers and VM management |
-| **Storage** | TrueNAS VM with HDD passthrough; NFS shares exported to Proxmox host across three pools (`tank/Media`, `tank/Immich`, `ssd/data`) |
-| **Containers** | Docker inside an unprivileged LXC, managed via Dockhand and Hawser for remote stack deployment |
+| **Storage** | ZFS managed directly on the Proxmox host (`tank` pool with `tank/Media` and `tank/Immich` datasets); no TrueNAS VM or NFS dependency |
+| **Containers** | Docker inside an unprivileged LXC with local ZFS bind mounts, managed via Dockhand and Hawser for remote stack deployment |
 | **Reverse Proxy** | Pangolin - handles ingress and SSL termination for internal services |
 | **Dashboard** | Homepage - self-hosted service dashboard with Docker socket integration |
 | **DNS / Filtering** | AdGuard Home with OISD blocklist and custom filter rules |
@@ -79,12 +79,12 @@ Infrastructure provisioning, service configuration, troubleshooting, and hardwar
 | File | Description |
 |------|-------------|
 | [adguardhome-filters.md](./server-setup/adguardhome-filters.md) | AdGuard Home configuration - OISD small blocklist plus custom block/allow rules for tracking domains and service-specific allowlists |
-| [current-proxmox-nfs-mount.md](./server-setup/current-proxmox-nfs-mount.md) | Active fstab entries for TrueNAS NFS mounts (`tank/Media`, `tank/Immich`, `ssd/data`) and LXC bind-mount configuration |
+| [current-proxmox-nfs-mount.md](./server-setup/current-proxmox-nfs-mount.md) | Legacy TrueNAS NFS/fstab configuration (historical reference; no longer in use) |
 | [docker-lxc-fix.md](./server-setup/docker-lxc-fix.md) | Fix for OCI runtime error (`net.ipv4.ip_unprivileged_port_start`) in Proxmox LXC - AppArmor unconfined profile and module masking |
 | [portainer-fix.md](./server-setup/portainer-fix.md) | Docker daemon config resolving Portainer API compatibility - includes `min-api-version`, log rotation, Nvidia runtime, and IPv6 settings |
 | [portfolio-setup.md](./server-setup/portfolio-setup.md) | Nginx:Alpine portfolio deployment bound to internal Docker bridge (`172.19.0.1:7373`) behind Pangolin to prevent direct public exposure |
 | [proxmox-discord-notifications.md](./server-setup/proxmox-discord-notifications.md) | Proxmox → Discord webhook integration for system alerts - includes UI config, JSON body template, and secret management |
-| [truenas-nfs-proxmox-lxc-docker.md](./server-setup/truenas-nfs-proxmox-lxc-docker.md) | Complete guide: TrueNAS NFS → Proxmox → unprivileged LXC → Docker with UID/GID 1000 mapping and fstab options |
+| [truenas-nfs-proxmox-lxc-docker.md](./server-setup/truenas-nfs-proxmox-lxc-docker.md) | Legacy guide for TrueNAS NFS → Proxmox → unprivileged LXC → Docker (historical reference) |
 | [truenas-pool-to-proxmox.md](./server-setup/truenas-pool-to-proxmox.md) | Migrate an existing TrueNAS VM ZFS pool to the Proxmox host without recreating it, including passthrough removal, local mounts, verification, and rollback |
 | [weekly-printer-maintenance.md](./server-setup/weekly-printer-maintenance.md) | CUPS setup for Epson network printer with cron-scheduled test prints to prevent inkjet clogging |
 
@@ -92,30 +92,34 @@ Infrastructure provisioning, service configuration, troubleshooting, and hardwar
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Proxmox VE Host                         │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                    TrueNAS VM (HDD Passthrough)           │  │
-│  │         4 × WD Red Plus 8 TB → ZFS Pool (tank)            │  │
-│  │              NFS Exports: Media, Immich, ssd/data         │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                              │                                   │
-│                         NFS Mounts                               │
-│                              ▼                                   │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │              Unprivileged LXC (Docker Host)               │  │
-│  │  ┌─────────────────────────────────────────────────────┐  │  │
-│  │  │  Docker Services                                    │  │  │
-│  │  │  • Media Stack (qBit/Sonarr/Radarr/Prowlarr)       │  │  │
-│  │  │  • Homepage Dashboard                               │  │  │
-│  │  │  • Dockhand / Hawser (Stack Management)            │  │  │
-│  │  │  • Watchtower / changedetection.io                 │  │  │
-│  │  └─────────────────────────────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                              │                                   │
-│                    Pangolin Reverse Proxy                        │
-│                              ▼                                   │
-└─────────────────────────────────────────────────────────────────┘
-                          Internet
+Proxmox manages the ZFS pool directly and bind-mounts local datasets into the Docker LXC. There is no separate TrueNAS VM or NFS layer.
+
+```text
+┌────────────────────────────────────────────────────────────────┐
+│                        Proxmox VE Host                         │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                  Host-Managed ZFS Storage                │  │
+│  │   4 × WD Red Plus 8 TB HDDs → ZFS Pool: tank             │  │
+│  │   Datasets: tank/Media, tank/Immich                      │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              │                                 │
+│                 Local ZFS / LXC bind mounts                    │
+│                              ▼                                 │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              Unprivileged LXC (Docker Host)              │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │ Docker Services                                    │  │  │
+│  │  │ • Media Stack (qBit/Sonarr/Radarr/Prowlarr)        │  │  │
+│  │  │ • Homepage Dashboard                               │  │  │
+│  │  │ • Dockhand / Hawser (Stack Management)             │  │  │
+│  │  │ • Watchtower / changedetection.io                  │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                              │                                 │
+│                    Pangolin Reverse Proxy                     │
+│                              │                                 │
+└──────────────────────────────┼─────────────────────────────────┘
+                               ▼
+                            Internet
 ```
