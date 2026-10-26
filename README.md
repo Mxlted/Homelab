@@ -9,8 +9,8 @@ Personal homelab setup, configurations, and automation for self-hosted infrastru
 | Component | Details |
 |-----------|---------|
 | **Hypervisor** | Proxmox VE - LXC containers and VM management |
-| **Storage** | ZFS managed directly on the Proxmox host (`tank` pool with `tank/Media` and `tank/Immich` datasets); no TrueNAS VM or NFS dependency |
-| **Containers** | Docker inside an unprivileged LXC with local ZFS bind mounts, managed via Dockhand and Hawser for remote stack deployment |
+| **Storage** | Proxmox-managed ZFS `tank` pool: 4 × 8 TB WD Red Plus HDDs in RAIDZ1, with `tank/Media` at `/tank/Media` and `tank/Immich` at `/tank/Immich` (local mounts, no TrueNAS or NFS layer) |
+| **Containers** | Docker inside an unprivileged LXC using host-local ZFS datasets via bind mounts, managed via Dockhand and Hawser for remote stack deployment |
 | **Reverse Proxy** | Pangolin - handles ingress and SSL termination for internal services |
 | **Dashboard** | Homepage - self-hosted service dashboard with Docker socket integration |
 | **DNS / Filtering** | AdGuard Home with OISD blocklist and custom filter rules |
@@ -92,7 +92,7 @@ Infrastructure provisioning, service configuration, troubleshooting, and hardwar
 
 ## Architecture
 
-Proxmox manages the ZFS pool directly and bind-mounts local datasets into the Docker LXC. There is no separate TrueNAS VM or NFS layer.
+Proxmox manages the four-drive RAIDZ1 ZFS pool directly and bind-mounts the `/tank/Media` and `/tank/Immich` datasets into the Docker LXC. The Proxmox OS and VM/LXC storage remain on the PNY CS3140 NVMe using LVM/LVM-thin. There is no separate TrueNAS VM or NFS layer.
 
 ```text
 ┌────────────────────────────────────────────────────────────────┐
@@ -100,8 +100,8 @@ Proxmox manages the ZFS pool directly and bind-mounts local datasets into the Do
 │                                                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │                  Host-Managed ZFS Storage                │  │
-│  │   4 × WD Red Plus 8 TB HDDs → ZFS Pool: tank             │  │
-│  │   Datasets: tank/Media, tank/Immich                      │  │
+│  │   4 × WD Red Plus 8 TB HDDs → RAIDZ1 (tank)              │  │
+│  │   Datasets: /tank/Media and /tank/Immich                  │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                              │                                 │
 │                 Local ZFS / LXC bind mounts                    │
