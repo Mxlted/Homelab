@@ -16,7 +16,7 @@ Personal homelab setup, configurations, and automation for self-hosted infrastru
 | **DNS / Filtering** | AdGuard Home with OISD blocklist and custom filter rules |
 | **Monitoring** | Watchtower for automated container image updates (every 6 hours); changedetection.io for web page change alerts |
 | **Notifications** | Proxmox system alerts forwarded to Discord via webhook |
-| **Hardware** | Intel Core i7-12700K · 4 × WD Red Plus 8 TB HDD · PNY CS3140 4 TB NVMe · Trident Z 64GB DDR4 RAM |
+| **Hardware** | Intel Core i7-12700K · 4 × WD Red Plus 8 TB HDD · PNY CS3140 4 TB NVMe · G.SKILL Trident Z 64GB DDR4 RAM |
 
 ---
 
